@@ -1,0 +1,8 @@
+#!/bin/bash
+
+SETTINGS=/opt/inventory/settings.py
+eval $(grep INV_USER $SETTINGS)
+mkdir -p /var/log/inventory
+touch /var/log/inventory/UpdateAll.log
+chown $INV_USER:$INV_USER /var/log/inventory/UpdateAll.log
+run-parts --lsbsysinit /opt/inventory/scripts/Update.d > /var/log/inventory/UpdateAll.log 2>&1

@@ -1,0 +1,15 @@
+# backend
+## BUGS:
+
+## New func
+* SUM for each object to perform faster checks
+* FLAG with status (ready/importing/etc)
+* add uptime
+* add network links (netstat)
+* aggregation?
+* get cpu load and mem and swap usage, and number of connected users
+* implement "last" for connected users?
+* get applications
+* get hw vendor
+
+# frontend

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Hosts{% endblock %}
+
+{% block content %}
+{% if hosts %}
+<div class="hero-unit">
+<h2>Hosts ({{hosts.count}})</h2>
+<p>Here a list of all hosts known by Inventory!</p>
+<p>Clic on a field to go to more details.</p>
+</div>
+{%include 'hosts/hosts_table.html' %}
+{% else %}
+<h1 style="color:#D92828">No hosts in db</h1>
+{% endif %}
+{% endblock %}

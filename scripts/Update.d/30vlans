@@ -1,0 +1,4 @@
+#!/bin/bash
+
+# update vlans/hosts association
+/opt/inventory/manage.py updatevlans

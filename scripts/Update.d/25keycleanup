@@ -1,0 +1,18 @@
+#!/bin/bash
+
+function cleanup_keystore()
+{
+  cd /tmp/inv
+  ls *-*.err >/dev/null 2>&1
+  if [ $? -eq 0 ]
+  then
+    grep -l "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED" *-*.err | while read file rest
+    do
+      mitmhost=$(echo $file | sed 's/-.*//')
+      echo "Maybe man in the middle attack for $mitmhost"
+      ssh-keygen -R $mitmhost && rm $file
+    done
+  fi
+}
+
+cleanup_keystore | sed 's/^/WARNING: /'

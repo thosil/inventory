@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# cleanup
+LOGDIR="/tmp/inv/log"
+ERRLOGDIR="/tmp/inv/errlog"
+DAYS=5
+mkdir -p $LOGDIR
+mkdir -p $ERRLOGDIR
+mv /tmp/inv/*.err $ERRLOGDIR
+find $LOGDIR -type f -mtime $DAYS -exec rm {} ";"
+find $ERRLOGDIR -type f -mtime $DAYS -exec rm {} ";"
+

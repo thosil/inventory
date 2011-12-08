@@ -1,0 +1,30 @@
+#!/bin/bash
+LOGDIR=/var/log/inventory
+SETTINGS=/opt/inventory/settings.py
+eval $(grep INV_USER $SETTINGS)
+LOGFILE=UpdateAll.log
+LOG="$LOGDIR/$LOGFILE"
+
+function main()
+{
+  NEWHOST=$1
+  rc=0
+  echo $NEWHOST | grep -q lab
+  if [ $? -eq 0 ]
+  then
+    echo "INFO: please do not add lab servers"
+    return 99
+  fi
+  /opt/inventory/scripts/UplAndRun $INV_DIR $NEWHOST
+  INV_FILE=$INV_DIR/$NEWHOST-$(date +"%Y%m%d")
+  if [ -s $INV_FILE ]
+  then
+    /opt/inventory/manage.py hostimport $INV_FILE
+    rc=$?
+  fi
+  return $rc
+}
+
+eval "export INV_DIR=$(awk -F"=" '/INV_DIR/{print $2}' $SETTINGS)"
+mkdir -p $LOGDIR
+main $1 | tee -a $LOG

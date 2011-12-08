@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Package {{object}}{% endblock %}
+
+{% block content %}
+<a href="../..">[..]</a>
+<div class="hero-unit">
+<h2>Package Details</h2>
+<p>
+<dl>
+  <dt>Name</dt>
+    <dd>{{object}}</dd>
+  <dt>Version</dt>
+    <dd>{{object.version}}</dd>
+</dl>
+</p>
+</div>
+<p>
+<h2>Installed on</h2>
+{% with hosts=object.hosts.all %}          
+{% include 'hosts/hosts_table.html' %}
+{% endwith%}                          
+</p>
+{% endblock %}

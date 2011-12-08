@@ -1,0 +1,475 @@
+#!/bin/bash
+export LANG=C
+export LC_ALL=C
+
+myhostname=$(hostname| sed 's/\..*//')
+
+# OS detection
+case $(uname) in
+  "AIX")
+    OS=AIX
+    os="AIX IBM $(oslevel -s | awk -F "-" '{a=substr($1,0,2);gsub("^0*","TL",$2);gsub("^0*","SP",$3);print a,$2 $3}' | sed 's/\(.\)\(.*\)/\1.\2/')"
+    echo $os | grep -q level
+    if [ $? -eq 0 ]
+    then
+      os="AIX IBM $(oslevel | awk -F"." '{print $1"."$2" TL"$3"SP"$4}')"
+    fi
+  ;;
+  "Linux")
+    OS="LINUX" 
+    if [ -e "/etc/SuSE-release" ] 
+    then
+      grep -q "^openSUSE" /etc/SuSE-release && os="Linux $(awk '/VERSION/{gsub("\\."," ",$3);print "openSUSE " $3}' /etc/SuSE-release)"
+      grep -q "^SUSE" /etc/SuSE-release && os="Linux $(awk '/VERSION/{v=$3} /PATCHLEVEL/{p=$3} END{print "SLES " v " " p}' /etc/SuSE-release)"
+    elif [ -e "/etc/redhat-release" ]
+    then
+      grep -q Server /etc/redhat-release && os="Linux RHEL $(cat /etc/redhat-release | cut -d' ' -f 7 | tr '.' ' ' | awk '{ if( $2 ~ "^$"){print $0 " " 0}else{print $0}}')"
+      echo $os | 
+      grep -q ES /etc/redhat-release && os="Linux RHEL $(cat /etc/redhat-release | cut -d' ' -f 7,10 | sed 's/)//' | tr '.' ' ')"
+    elif [ -e "/etc/lsb-release" ]
+    then
+      . /etc/lsb-release
+      os=$(echo "Linux Ubuntu $DISTRIB_RELEASE"| tr "." " ")
+    else
+        os="Linux Unknown"
+    fi
+  ;;
+  "SunOS")
+    OS="SOLARIS"
+    os=$(head -1 /etc/release| /usr/ucb/sed 's/\(.*\) \(.*_.*_.*\) \(.*\)/\2/' | tr -d '[:alpha:]' | awk -F'_' '{print "Solaris Oracle " $1 " " $2}')
+  ;;
+esac
+
+# UPTIME
+UPTIME=0
+case $OS in
+  "SOLARIS")
+    boot=$(kstat -p  unix:0:system_misc:boot_time|awk '{print $2}')
+    now=$(perl -e "print time")
+    UPTIME=$(( (now - boot)/86400 ))
+  ;;
+  *)
+    uptime | grep 'day' >/dev/null 2>&1 && UPTIME=$(uptime | awk '{print $3}')
+  ;;
+esac
+
+# physical or virtual
+# TODO: xen
+case $OS in
+  "AIX")
+    type="Virtual"
+    uname -L | grep -q NULL && type="Physical"
+  ;;
+  "LINUX")
+    type="Physical"
+    if [ -e "/sys/block/sda" ]
+    then
+      grep -qi vmware /sys/block/sda/device/vendor && type="Virtual"
+    fi
+    [ -e "/sys/block/vda" ] && type="Virtual"
+    [ -e "/sys/block/xvda" ] && type="Virtual"
+    /sbin/lsmod | grep -q ^vmm && type="Virtual"
+  ;;
+  "SOLARIS")
+    if [ -e /usr/sbin/zoneadm ]
+    then
+      /usr/sbin/zoneadm list | grep global >/dev/null 2>&1
+      if [ $? -eq 0 ]
+      then
+        type="Physical"
+      else
+        type="Virtual"
+      fi
+    else
+      type="Physical"
+    fi
+  ;;
+esac
+
+# CORES
+case $OS in
+  "AIX")
+    cores=$(lscfg | grep "proc.*Processor" | wc -l| sed 's/\ *//g')
+  ;;
+  "LINUX")
+    if [ $type = "Physical" ]
+    then
+      cpusslot=$(grep "physical id" /proc/cpuinfo | sort | uniq | wc -l)
+      corespercpu=$(grep "cpu cores" /proc/cpuinfo | uniq | cut -d" " -f 3)
+      [ -z $corespercpu ] && corespercpu=1
+      cores=$(( cpusslot * corespercpu ))
+    else
+      cores=$(cat /proc/cpuinfo | grep processor | wc -l)
+    fi
+  ;;
+  "SOLARIS")
+    cores=$(/usr/sbin/psrinfo| wc -l)
+  ;;
+esac
+
+# MEM in GB
+case $OS in
+  "AIX")
+    mem=$(lsattr -E -l mem0 | awk '/Total/{printf ("%0.1f", $2/1024)}')
+  ;;
+  "LINUX")
+    mem=$(awk '/MemTotal/{mem=$2/1000/1000; printf("%0.1f",mem)}' /proc/meminfo)
+  ;;
+  "SOLARIS")
+    mem=$(/usr/sbin/prtconf -v 2>/dev/null| grep "Memory size:" | awk '{printf $3/1024}')
+  ;;
+esac
+
+# IP (admin's ip, we connect via ssh on this one, is a field of model Host)
+case $OS in
+  "AIX")
+    myip=$(host $HOSTNAME | awk '/ is /{gsub(",","",$3);print $3}')
+  ;;
+  "LINUX")
+    myip=$(host $HOSTNAME)
+    if [ $? -gt 0 ]
+    then
+      myip=$(getent hosts $HOSTNAME | cut -f1 -d" ")
+    else
+      myip=$(host $HOSTNAME | egrep "A|address" | sed 's/^.*[\ |\t]//')
+    fi
+  ;;
+  "SOLARIS")
+    myip=$(getent hosts $myhostname | awk '{print $1}'|uniq)
+  ;;
+esac
+
+# NET INTERFACES
+## NETIFACES={
+#  'bond0':{ 'mac': '68:b5:99:71:2a:ba', 'ips': ["10.92.0.52/24",], 'linkstate': True, 'speed': 100, 'duplex' : 'Full', 'slaves':'eth3 eth5', },
+#  'eth0': {'mac': '00:58..', 'ips': ['153.89.16.21/24','21a5.0..1/32',], 'linkstate':True,},'eth1':...
+#}
+case $OS in
+  "AIX")
+    NETIFACES="{"
+    for IF in $(lsdev -Cc if -t en| awk '/Available/{print $1}')
+    do
+      MAC=$(entstat $IF | awk '/Hardware Address/{print $3}')
+      IPS=$(ifconfig $IF | awk '/inet/{out=out "\"" $2 "/" $4 "\"" ","}END {print "[" out "]"}')
+      LINKSTATE="False"
+      OPERSTATE=$(lsattr -El $IF -a state| awk '{print $2}');[ $OPERSTATE = "up" ] && LINKSTATE="True"
+      SLAVES=""
+      SPEED=0
+      media_speed=$(lsattr -El $(echo $IF | sed 's/n/nt/') | awk '/media_speed/{ gsub("_"," ",$2); print $2}')
+      echo $media_speed | grep -q "Auto"
+      if [ $? -ne 0 ]
+      then
+        [ -z "$media_speed" ] || SPEED=$(echo $media_speed | cut -f1 -d" ")
+        DUPLEX=$(echo $media_speed | cut -f2- -d" ")
+      else
+        DUPLEX=$media_speed
+      fi
+      NETIFACES=$NETIFACES"
+    '$IF':{ 'mac': '$MAC', 'ips': $IPS, 'linkstate': $LINKSTATE, 'speed': $SPEED, 'duplex': '$DUPLEX', $SLAVES},"
+    done
+    NETIFACES=$NETIFACES"}"
+  ;;
+  "LINUX")
+    NETIFACES="{"
+    if [ -d /sys ]; then INETS=$(ls /sys/class/net | egrep -v "lo|virbr|bonding_masters|sit")
+    else INETS=$(/sbin/ifconfig -a | grep -v lo| awk '/Link/{print $1}'); fi
+    for IF in $INETS
+    do
+      LINKSTATE="False"
+      eval $( /sbin/ifconfig $IF|awk '/HWaddr/{print "MAC="$5}
+                                      /UP/{print "LINKSTATE=True"}
+                                      /inet addr/{sub("addr:","",$2);sub("Mask:","",$4);out=out "\\\"" $2 "/" $4 "\\\"" ","}
+                                      /inet6 addr/{if( $3 !~ /^fe80/){sub("addr:","",$3);out=out "\\\"" $3 "\\\"" ","}}
+                                      END{print "IPS=[" out "]"}' )
+      SLAVES=""
+      SPEED=0
+      DUPLEX=""
+      if [ -d /sys ]
+      then
+        NETPATH="/sys/class/net/$IF"
+        [ -d $NETPATH/bonding ] && SLAVES="'slaves': '$(cat $NETPATH/bonding/slaves)',"
+        [ -e $NETPATH/speed ] && SPEED=$(cat $NETPATH/speed)
+        [ -e $NETPATH/duplex ] && DUPLEX=$(cat $NETPATH/duplex)
+      fi
+      NETIFACES=$NETIFACES"
+      '$IF':{ 'mac': '$MAC', 'ips': $IPS, 'linkstate': $LINKSTATE, 'speed': $SPEED, 'duplex': '$DUPLEX', $SLAVES},"
+    done
+    NETIFACES=$NETIFACES"}"
+  ;;
+  "SOLARIS")
+    NETIFACES="{"$(/sbin/ifconfig -a | grep -v "lo" | grep "index" | sed 's/: / /' | while read IF rest
+    do
+      # if IF for a zone the continue
+      /sbin/ifconfig $IF | grep zone >/dev/null 2>&1 && continue
+      /sbin/ifconfig $IF | grep ether >/dev/null 2>&1 && MAC=$(/sbin/ifconfig $IF | awk '/ether/{print $2}')
+      IPS=$(/sbin/ifconfig $IF | awk '/inet/{if($2 !~ /0.0.0.0/){out=out "\"" $2 "/0x" $4 "\"" ","}}END {print "[" out "]"}')
+      MAC="00:00:00:00:00:00"
+      for myip in $(/sbin/ifconfig $IF | awk '/inet/{if($2 !~ /0.0.0.0/){print $2}}')
+      do
+        mymac=$(/usr/sbin/arp -an | awk '$2~/'$myip'$/ && $4~/.*L.*/{print $5}')
+        [ ! -z "$mymac" ] && MAC=$mymac
+      done
+      LINKSTATE="False"; echo $rest | grep "UP" >/dev/null 2>&1 && LINKSTATE="True"
+      SLAVES=""
+      SPEED=0
+      DUPLEX=""
+      echo "    '$IF':{ 'mac': '$MAC', 'ips': $IPS, 'linkstate': $LINKSTATE, 'speed': $SPEED, 'duplex': '$DUPLEX', $SLAVES},"
+    done)"}"
+  ;;
+esac
+
+# HBAs
+# HBAS={
+#   'host0' : {'wwn': '10000000c971cca0', 'speed': '4 Gigabit', 'linkstate': True, 'extra' : 'Emulex LPe11000-M4 4Gb 1port FC: PCIe SFF HBA'},
+# }
+case $OS in
+  "AIX")
+  HBAS="{"
+  for hba in $(lsdev -Cc adapter | awk '/^fcs/{print $1}')
+  do
+    wwn=$(lscfg -vpl $hba | sed 's/\./ /g' | awk '/Network Address/{print $3}')
+    extra=$(lscfg -vpl $hba | awk -F":  " '/Model/{print $2}')
+    fcstate $hba > /dev/null 2>&1
+    if [ $? -gt 0 ]
+    then
+      speed="0"
+      LINKSTATE="False"
+    else
+      speed=$(fcstat fcs0 | awk '/Speed.*running/{print $4,$5}')
+      LINKSTATE="True"
+    fi
+        HBAS=$HBAS"
+    '$hba' :{'wwn':'$wwn', 'speed': '$speed', 'linkstate' : $LINKSTATE, 'extra': '$extra',},"
+  done
+  HBAS=$HBAS"}"
+  ;;
+  "LINUX")
+    HBAS="{"
+    if [ -d /sys/class/fc_host ]
+    then
+      cd /sys/class/fc_host
+      SCSIPATH="/sys/class/scsi_host"
+      for hba in *
+      do
+        [ -f $hba/port_name ] && wwn=$(cat $hba/port_name | sed 's/^0x//')
+        [ -f $hba/speed ] && speed=$(cat $hba/speed)
+        [ -f $SCSIPATH/$hba/port_name ] && wwn=$(cat $SCSIPATH/$hba/port_name | sed 's/^0x//')
+        [ -f $SCSIPATH/$hba/speed ] && speed=$(cat $SCSIPATH/$hba/speed)
+        LINKSTATE=False
+        [ -f $SCSIPATH/$hba/state ] && grep -q Up $SCSIPATH/$hba/state && LINKSTATE=True;
+        [ -f $SCSIPATH/$hba/modeldesc ] && extra=$(cat $SCSIPATH/$hba/modeldesc)
+        HBAS=$HBAS"
+    '$hba' :{'wwn':'$wwn', 'speed': '$speed', 'linkstate' : $LINKSTATE, 'extra': '$extra',},"
+      done
+    fi
+    HBAS=$HBAS"}"
+  ;;
+  "SOLARIS")
+  # speed :
+  # linkstate: 
+  # extra: 
+  if [ -d /dev/fc ]
+  then
+    cd /dev/fc
+    HBAS="{"`for hba in *
+    do
+      speed="0" # Can not get speed in Solaris
+      linkstate="True"
+      wwn=$(/usr/sbin/prtconf -pv $hba 2>&1 | sed -ne '/initiator-port/,/value/p'| awk -F"'" '/value/{print $2}')
+      if [ -z $wwn ] # if prtconf can not get infos for this hba, it is probably down
+      then
+        linkstate="False"
+      fi
+      pathtoinst=$(ls -l $hba | nawk '{sub("/fp.*","");sub(".*devices","");print}')
+      eval $(grep $pathtoinst'"' /etc/path_to_inst| nawk '{print "driver="$3}')
+      case $driver in
+        "qlc") extra="QLogic" ;;
+        "emlxs") extra="Emulex" ;;
+        "lpfc") extra="Emulex" ;;
+        *) extra=$driver
+      esac
+      echo "    '$hba' :{'wwn':'$wwn', 'speed': '$speed', 'linkstate' : $linkstate, 'extra': '$extra',},"
+    done`"}"
+  else
+    HBAS="{}"
+  fi
+  ;;
+esac
+
+
+# DISKS
+# TODO: device id for emcpower devices
+case $OS in
+  "AIX")
+    disks=$(lspv | awk '!/None/{print $1}')
+  ;;
+  "LINUX")
+    if [ -d /sys ]
+    then
+        disks=$(ls /sys/block | egrep -v "^loop|^ram|^dm-|^sr|^fd|^hd|^md" | sed 's/cciss!//g')
+        echo $disks | grep -q emc && disks=$(echo $disks | sed 's/sd.*\>//g' | sort -n)
+    else
+        disks=$(cat /proc/partitions | egrep -v "name|^$" | awk '{if(($2%16) == 0){print $4}}')
+    fi
+  ;;
+  "SOLARIS")
+    #disks=$(/usr/sbin/cfgadm -o show_FCP_dev -al | grep ^c | awk '{print $1}')
+    #disks=$(/usr/bin/ls -1 /dev/dsk/*s2)
+    [ $type = "Physical" ] && disks=$(iostat -nE| nawk '/^c/{disk=$1} /^Vendor/{if ($0 !~ "DV|CD|IBM.*ULT") {print disk}}')
+  ;;
+esac
+
+# DAEMONS
+# in output: dameons=('sshd','ntpd',)
+# here a simple list
+case $OS in
+  "AIX")
+    daemons=`lssrc -a | awk '/active/{print $1}'`
+  ;;
+  "LINUX")
+    # TODO: refine
+    daemons=""
+    R=$(/sbin/runlevel | awk '{print $2}')
+    if [ -d /etc/rc$R.d ]
+    then
+      daemons=`ls /etc/rc$R.d/ | grep "^S" | sed 's/^...//' | sort -u`
+    elif [ -d /etc/init.d/rc$R.d ]
+    then
+      daemons=`ls /etc/init.d/rc$R.d/ | grep "^S" | sed 's/^...//' | sort -u`
+    fi
+    # U 10.04
+    if [ -d /etc/init ]
+    then
+      cd /etc/init
+      daemons=$daemons" $(grep -s -l "start on runlevel.*$R" * | sed 's/.conf//')"
+      daemons=$(echo $daemons | sed 's/ /\n/g' | sort -u)
+    fi
+    # U 8.04
+    if [ -d /etc/event.d ]
+    then
+      cd /etc/event.d
+      daemons=$daemons" $(grep -l "start on runlevel.*$R" * | sed 's/.conf//')"
+      daemons=$(echo $daemons | sed 's/ /\n/g' | sort -u)
+    fi
+  ;;
+  "SOLARIS")
+    if [ -e /usr/bin/svcs ]
+    then
+      daemons=`svcs -a | nawk '$1 ~ /online|legacy/{sub(".*S..","");sub(".*/","");sub(":.*$",""); print}'|sort -u`
+    else
+      R=$(who -r | sed 's/.*run-level //;s/ .*//')
+      daemons=`ls /etc/rc$R.d/ | grep "^S" | sed 's/^...//' | sort -u`
+    fi
+  ;;
+esac
+
+# NETLINKS
+# netlinks=(("153.89.16.18:22","172.16.22.18:6587"),("IP1:Port1","IP2:Port2"),)
+case $OS in
+  "AIX")
+    netlinks4=$(netstat -n -f inet  | awk '/ESTABLISHED/{print "(\""$4"\",\""$5"\"),"}' | sed 's/\.\([0-9]*\)"/:\1"/g')
+    netlinks6=$(netstat -n -f inet6 | awk '/ESTABLISHED/{print "(\""$4"\",\""$5"\"),"}' | sed 's/\.\([0-9]*\)"/:\1"/g')
+    netlinks=$netlinks4$netlink6
+  ;;
+  "LINUX")
+    netlinks=$(netstat -tn | awk '/ESTABLISHED/{print "(\""$4"\",\""$5"\"),"}')
+  ;;
+  "SOLARIS")
+    netlinks4=$(netstat -n -f inet  | awk '/ESTABLISHED/{print "(\""$1"\",\""$2"\"),"}' | sed 's/\.\([0-9]*\)"/:\1"/g')
+    netlinks6=$(netstat -n -f inet6 | awk '/ESTABLISHED/{print "(\""$1"\",\""$2"\"),"}' | sed 's/\.\([0-9]*\)"/:\1"/g')
+    netlinks=$netlinks4$netlink6
+  ;;
+esac
+
+##############
+### OUTPUT ###
+##############
+echo "# $myhostname :: $(date)
+# coding=utf-8
+try:
+  del(hostinv)
+except NameError:
+  pass
+
+class hostinv:
+  hostname='$myhostname'
+  os='$os'
+  type='$type'
+  cpu=$cores
+  mem='$mem'
+  ip='$myip'
+  lastcheck='$(date +"%Y-%m-%d")'
+  uptime=$UPTIME
+  disks=( "
+for d in $disks
+do
+    [ $OS = "AIX" ] && size=$(lspv $d 2>/dev/null | awk '/^PP SIZE/{size=$3};/^TOTAL/{tot=$3} END{print size*tot/1024}')
+    if [ $OS = "LINUX" ]
+    then
+      if [ -d /sys ]; then size=$(awk '{print $1/2/1000/1000}' /sys/block/*$d/size)
+      else
+        echo $d | grep -q "/" && d=$(echo $d | sed 's/\//\\\//')
+        size=$(awk '/\<'$d'\>/{print $3/1000/1000}' /proc/partitions)
+      fi
+    fi
+    [ $OS = "SOLARIS" ] && size=$(iostat -nE -l1 $d | grep Size | sed 's/\(.*Size: \)\(.*\)\(GB.*\)/\2/')
+    echo "    ('$d', $size),"
+done
+echo "  )
+  users=(" 
+cat /etc/passwd | grep -v "+:" | grep -v "^$" | sort -n | awk -F':' '{print "  (\""$1"\","$3","$4",\""$5"\",\""$6"\",\""$7"\"),"}'
+echo "  )
+  groups=("
+cat /etc/group | grep -v "+:" | grep -v "^$" | sort -n | awk -F':' '{print "  (\""$1"\","$3",\""$4"\"),"}'
+
+echo "  )
+  packages=("
+case $OS in
+  "AIX")
+    lslpp -l -c| grep -v '^#Fileset' | sort -n | uniq | awk -F":" '{print "  (\""$2"\",\""$3"\"),"}'
+  ;;
+  "LINUX")
+    if [ -e "/usr/bin/dpkg" ]
+    then
+      dpkg -l | sort -n | awk '/^ii/{print "  (\""$2"\",\""$3"\"),"}'
+    else
+      rpm -qa --qf "  ('%{NAME}.%{ARCH}','%{VERSION}-%{RELEASE}'),\n" | sort -n
+    fi
+  ;;
+  "SOLARIS")
+    if [ -d /var/sadm/pkg ]
+    then
+      cd /var/sadm/pkg
+      for PKG in *
+      do
+        nawk '/^VERSION/{ gsub("VERSION=",""); print "  (\"'$PKG'\",\""$0"\"),"}' /var/sadm/pkg/$PKG/pkginfo
+      done
+    fi
+  ;;
+esac
+echo "  )
+  filesystems=("
+case $OS in
+  "AIX")
+    df -mP | egrep -v "proc" | sort -n | awk '/\//{print "  (\""$1"\",\"jfs2\","$2",\""$5"\",\""$6"\"),"}'
+  ;;
+  "LINUX")
+    df -PmlT | egrep -v "tmpfs|loop|fuse|debug" | sort -n| awk '/\//{print "  (\""$1"\",\""$2"\","$3",\""$6"\",\""$7"\"),"}'
+  ;;
+  "SOLARIS")
+   df -k 2>/dev/null| egrep -v "Filesystem|devices|contract|proc|mnttab|volatile|object|sharetab|\/dev\/fd|tmp|\/var\/run|libc.so.1" | awk '{print  "  (\""$1"\",\"zfs\","$2/1024",\""$5"\",\""$6"\"),"}'
+  ;;
+esac
+echo "  )
+  netifaces=$NETIFACES
+  hbas=$HBAS
+  daemons=("
+for d in $daemons
+do
+echo "    '$d',"
+done
+echo "  )
+  netlinks=($netlinks)
+h = hostinv()
+h.srvtime='"$(date +"%Y-%m-%d %H:%M")"'
+"

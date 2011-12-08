@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Clients{% endblock %}
+
+{% block content %}
+{% if object_list %}
+<div class="hero-unit">
+<h2>Clients ({{object_list.count}})</h2>
+<p>Here a list of all clients known by Inventory!</p>
+<p>Clic on a field to go to more details.</p>      
+</div>
+<table class="zebra-striped">
+<thead>
+<tr>
+  <th>Client Name</th>
+  <th>Hosts</th>
+</tr>
+</thead>
+<tbody>
+{% for client in object_list %}
+  <tr><td><a href='/hosts/clients/client/{{client.id}}/'>{{client}}</a></td><td>{{client.host_set.count}}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% else %}
+<h1 style="color:#D92828">No Clients in db</h1>
+{% endif %}
+{% endblock %}

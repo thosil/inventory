@@ -1,0 +1,329 @@
+from django.core.management.base import BaseCommand, CommandError
+from django.core.exceptions import ObjectDoesNotExist
+from inventaires.hosts.models import *
+import traceback
+from datetime import datetime, date
+import os,re,shutil,sys
+import netaddr
+import settings
+
+class Command(BaseCommand):
+    args = '<file file ...>'
+    help = 'import a host, arg must be a well formed file with a hostinv class, without args import all files in %s .' % settings.INV_DIR
+    def handle(self, *args, **options):
+        glob={}
+        beginimport = datetime.now()
+        print 'INFO: %s: HostImport BEGIN' % beginimport.ctime()
+        errors=0
+        if len(args) == 0:
+            if setup() > 0:
+                sys.exit(99)
+            args = os.listdir(settings.INV_DIR)
+            try:
+                args.remove('log')
+            except:
+                pass
+        for f in args:
+            try:
+                if not re.match('.*-.*', f):
+                    print "WARNING: %s is not a valid file (format = host-date)" % f
+                    continue
+                if re.match('.*\.err', f):
+                    print "ERROR: err file present: %s, you should check it." % f
+                    continue
+                execfile(f, glob)
+                print 'INFO: %s: Begin import of Host "%s"' % (datetime.now().ctime(), glob['h'].hostname)
+                begintime = datetime.now()
+                ImportUpdate(glob['h'])
+                try:
+                    shutil.move(f, settings.INV_DIR + "/log")
+                except:
+                    os.remove( settings.INV_DIR + "/log/" + f)
+                    shutil.move(f, settings.INV_DIR + "/log")
+                print 'INFO: %s: Successfully imported Host "%s :: %ssec"' % (datetime.now().ctime(), glob['h'].hostname, (datetime.now()-begintime).seconds)
+            except Exception as e:
+                print e
+                print "ERROR: Can't import file %s" % f
+                os.rename(f, f + ".import.err")
+                traceback.print_exc()
+                errors +=1
+        cleanup()
+        print 'INFO: %s: HostImport END with %s error(s) :: %ssec' % (datetime.now().ctime(),errors, (datetime.now()-beginimport).seconds)
+
+def setup():
+    try:
+        os.chdir(settings.INV_DIR)
+        if os.path.exists("log") == False:
+            os.mkdir("log")
+        os.system('chown %s log' % settings.INV_USER )
+    except:
+        print "ERROR: can't create log dir %s%s, exiting." % (settings.INV_DIR, "/log")
+        return 99
+
+def cleanup():
+    print "INFO: Begin cleanup: (please wait)"
+    '''os'''
+    for os in OS.objects.all():
+        if (os.host_set.all().count() == 0):
+            print "INFO: delete os %s" % os
+            os.delete()
+    '''pkg'''
+    for p in Package.objects.all():
+        if(p.hosts.count() == 0 ):
+            print "INFO: delete package %s version %s" % (p,p.version)
+            p.delete()
+    print "INFO: End cleanup"
+
+def ImportUpdate(h):
+    '''os'''
+    h.os = h.os.split()
+    try:
+        h.os = OS.objects.get(osname=h.os[0],vendor=h.os[1],majorversion=h.os[2],minorversion=h.os[3])
+    except:
+        h.os = OS(osname=h.os[0],vendor=h.os[1],majorversion=h.os[2],minorversion=h.os[3])
+        h.os.save()
+    '''host'''
+    try:
+        nh = Host.objects.get(hostname=h.hostname)
+        #if str(nh.lastcheck) == h.lastcheck: return
+        if (nh.os != h.os): nh.os = h.os
+        if (nh.type != h.type): nh.type = h.type
+        if (nh.cpu != h.cpu): nh.cpu = h.cpu
+        if (nh.gbmem != h.mem): nh.gbmem = h.mem
+        if (nh.ip != h.ip): nh.ip = h.ip
+        nh.uptime = h.uptime
+        nh.save()
+    except:
+        nh = Host(hostname=h.hostname,os=h.os,type=h.type,cpu=h.cpu,gbmem=h.mem,ip=h.ip,uptime=h.uptime)
+        nh.save()
+    '''disks'''
+    for hd in nh.disk_set.all():
+        disknotfound=True
+        for d in h.disks:
+            if (hd.diskname == d[0]): disknotfound = False
+        if disknotfound:
+            hd.delete()
+    for d in h.disks:
+        try:
+            dsize=int(float(d[1]))
+        except IndexError:
+            dsize=0
+        try:
+            nd = Disk.objects.get(diskname=d[0], host=nh)
+            if (nd.size != dsize):
+                nd.size = dsize
+                nd.save()
+        except: 
+            nd = Disk(diskname=d[0],size=dsize, host=nh)
+            nd.save()
+    '''users'''
+    for hu in nh.user_set.all():
+        usernotfound = True
+        for u in h.users:
+            if(hu.username == u[0]): usernotfound = False
+        if(usernotfound):
+            hu.delete()
+    for u in h.users:
+        try:
+            nu = User.objects.get(username=u[0],host=nh)
+            nudiff = False
+            if (nu.uid != u[1]): 
+                nu.uid = u[1]
+                nudiff = True
+            if (nu.gid != u[2]): 
+                nu.gid = u[2]
+                nudiff = True
+            if (nu.gecos != u[3]): 
+                nu.gecos = u[3]
+                nudiff = True
+            if (nu.home != u[4]): 
+                nu.home = u[4]
+                nudiff = True
+            if (nu.shell != u[5]): 
+                nu.shell = u[5]
+                nudiff = True
+            if (nudiff):
+                nu.save()
+        except:
+            nu = User(username=u[0],uid=u[1],gid=u[2],gecos=u[3],home=u[4],shell=u[5],host=nh)
+            nu.save()
+    '''groups'''
+    '''delete previously discovered group if necessary'''
+    for hg in nh.group_set.all():
+        groupnotfound = True
+        for g in h.groups:
+            if(hg.groupname == g[0]): groupnotfound = False
+        if(groupnotfound):
+            hg.delete()
+    '''create/update discovered group'''
+    for g in h.groups:
+        try:
+            '''update if necessary'''
+            ng = Group.objects.get(groupname=g[0],host=nh)
+            if (ng.gid != g[1]):
+                ng.gid = g[1]
+                ng.save()
+        except ObjectDoesNotExist:
+            '''create'''
+            ng = Group(groupname=g[0],gid=g[1],host=nh)
+            ng.save()
+        '''delete previously dicovered internal group members'''
+        for m in ng.members.all():
+            usernotfound = True
+            for gu in g[2].split(','):
+                if ( m.username == gu): usernotfound = False
+            if(usernotfound):
+                ng.members.remove(m)
+        '''delete previously dicovered external group members'''
+        for m in ng.extmembers.all():
+            usernotfound = True
+            for gu in g[2].split(','):
+                if ( m.username == gu): usernotfound = False
+            if(usernotfound):
+                ng.extmembers.remove(m)
+        '''update internal and external group members'''
+        for gu in g[2].split(','):
+            if (gu != ""):
+                try:
+                    '''try to find internal user'''
+                    ng.members.add(User.objects.get(username=gu, host=nh))
+                except ObjectDoesNotExist:
+                    try:
+                        '''try to find external user'''
+                        ng.extmembers.add(ExternalUser.objects.get(username=gu))
+                    except ObjectDoesNotExist:
+                        print "WARNING: %s: can't add user %s in group %s not a valid internal or external user" % (nh, gu, ng)
+    '''pkg'''
+    nhpkgs = nh.packages.all()
+    for hp in nhpkgs:
+        pkgnotfound=True
+        for p in h.packages:
+            if (hp.pkgname == p[0]): 
+                if (hp.version == p[1]): 
+                    pkgnotfound=False
+        if(pkgnotfound):
+            nh.packages.remove(hp)
+    del(nhpkgs)
+    for p in h.packages:
+        try:
+            np = Package.objects.get(pkgname=p[0],version=p[1])
+        except:
+            np = Package(pkgname=p[0],version=p[1])
+            np.save()
+        try:
+            hp = nh.packages.get(pkgname=p[0])
+            if (hp.version != p[1]):
+                nh.packages.remove(hp)
+                nh.packages.add(np)
+                if ( hp.hosts.all().count() == 0):
+                    hp.delete()
+        except:
+            nh.packages.add(np)
+    '''fs'''
+    # if a fs is deleted from a host, delete it in db
+    for hfs in nh.fs_set.all():
+        fsnotfound = True
+    for fs in h.filesystems:
+        if hfs.device == fs[0]:
+            if hfs.mountpoint == fs[4]:
+                fsnotfound = False
+    if fsnotfound:
+        hfs.delete()
+    for fs in h.filesystems:
+        fssize = int(fs[2])
+        pct_used = int(fs[3].strip('%'))
+        try:
+            newfs = FS.objects.get(device = fs[0], mountpoint = fs[4], host = nh)
+            newfsdiff = False
+            if newfs.fstype.fstype != fs[1]:
+                newfs.fstype, created = FStype.objects.get_or_create(fstype=fs[1])
+                newfsdiff = True
+            if newfs.size != fssize:
+                newfs.size = fssize
+                newfsdiff = True
+            if newfs.percent_used != pct_used:
+                newfs.percent_used = pct_used
+                newfsdiff = True
+            if newfsdiff:
+                newfs.save()
+        except ObjectDoesNotExist:
+            newfs_type, created= FStype.objects.get_or_create(fstype=fs[1])
+            newfs = FS(device=fs[0],fstype=newfs_type, size=fssize, percent_used = pct_used, mountpoint= fs[4], host=nh)
+            newfs.save()
+    '''interfaces'''
+    ## in get_inv: NETIFACES={'eth0': {'mac': '00:58..', 'ips': ['153.89.16.21/24','21a5.0..1/32',], 'linkstate':True},'eth1':...}
+    for NHiface in nh.interface_set.filter(type='NET'):
+        ifacenotfound=True
+        for iface,val in h.netifaces.iteritems():
+            if NHiface.name == iface and NHiface.hwaddr == val['mac']: ifacenotfound = False
+        if ifacenotfound :
+            NHiface.delete()
+    for iface,val in h.netifaces.iteritems():
+        try:
+            ni = Interface.objects.get(name = iface, hwaddr = val['mac'], host=nh)
+            ni.linkstate = val['linkstate']
+	    ni.speed = "%s %s" % (val['speed'],val['duplex'])
+	    if val.has_key('slaves'): ni.extra = val['slaves']
+            ni.save()
+        except: 
+            ni = Interface(name=iface, hwaddr=val['mac'], type='NET', host=nh, linkstate=val['linkstate'], speed = "%s %s" % (val['speed'],val['duplex']))
+	    if val.has_key('slaves'): ni.extra = val['slaves']
+            ni.save()
+        for NHip in ni.ip_set.all():
+            if NHip.ipaddr not in [i.split('/')[0] for i in val['ips']]:
+                NHip.delete()
+        for ip_net in val['ips']:
+            # check netmask, if /24 or /255.255... do nothing, but if /fffffe00 or /0xfffffe00 convert to /23
+            ip,net = ip_net.split('/')
+            if net.isdigit() or net.find('.') :
+                ipnet = netaddr.IPNetwork(ip_net)
+            else:
+                net = bin(eval("0x%s" % net.replace("0x",""))).count('1')
+                ipnet = netaddr(IPNetwork("%s/%s" % (ip,net))
+            newip, created = IP.objects.get_or_create(ip=ipnet.ip, netmask=ipnet.netmask, interface=ni)
+    # TODO: HBAS
+    # build 2 wwn's lists one from db, second from this file
+    # check presence of wwn in db into second list, if not -> cleanup
+    # if yes, update fields
+    # check presence of wwn in file into db, if not create it
+    # ex: mywwn="10000000c9c06212"
+    # if mywwn not in [val['wwn'] for hba,val in hbas.iteritems()]: print "cleanup here"
+    nh_wwn = [ hba.hwaddr for hba in nh.interface_set.filter(type='FC') ]
+    nh_wwn.sort()
+    h_wwn = [ value['wwn'] for hba,value in h.hbas.iteritems() ]
+    h_wwn.sort()
+    if h_wwn != nh_wwn:
+        oldwwns = [oldwwn for oldwwn in nh_wwn if oldwwn not in h_wwn]
+        newwwns = [newwwn for newwwn in h_wwn if newwwn not in nh_wwn]
+        for oldwwn in oldwwns:
+            nh.interfaces_set.get(type='FC',hwaddr=oldwwn).delete()
+        for hba,val in hbas.iteritems():
+            if val['wwn'] in newwwns:
+                newhba = Interface(name=hba,hwaddr=val['wwn'],type='FC',host=nh,linkstate=val['linkstate'], speed = val['speed'], extra = val['extra'])
+    # TODO: DAMEONS
+    nh_daemons = [daemon.name for daemon in nh.daemons.all()]
+    h_daemons = [daemon for daemon in h.daemons]
+    nh_daemons.sort()
+    h_daemons.sort()
+    if h_daemons != nh_daemons:
+        olddaemons = [olddaemon for olddaemon in nh_daemons if olddaemon not in h_daemons]
+        newdaemons = [newdaemon for newdaemon in h_daemons if newdaemon not in nh_daemons]
+        for oldaemon in olddaemons:
+            nh.daemons.remove(Daemons.objects.get(name=olddaemon))
+        for newdaemon in newdaemons:
+           nd,created = Daemon.objects.get_or_create(name=newdaemon)
+           nh.daemons.add(nd)
+    # TODO: NETLINKS
+    nh.netlinks.all().delete()
+    for netlink h.netlinks:
+        hlocal_ip,hlocal_port = netlink[0].split(':')
+        hremote_ip,hremote_port = netlink[1].split(':')
+        Netlink(local_ip=hlocal_ip,local_port=hlocal_port,remote_ip=hremote_ip,remote_port=hremote_port,host=nh)
+    # TODO: ntp difftime
+    '''lastcheck'''
+    try:
+        nh.lastcheck=h.lastcheck
+    except AttributeError:
+        nh.lastcheck = date.isoformat(date.today())
+    finally:
+        nh.save()

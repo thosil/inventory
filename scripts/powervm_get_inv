@@ -1,0 +1,10 @@
+#!/bin/bash
+# get name,ip,cpu,mem of frames
+ssh mgtu02 -- "echo '\"esxhost\",\"numcpu\",\"memorymb\"'
+lssyscfg -r sys -F name | while read framename
+do
+  cpu=\$(lshwres -m \"\$framename\" -r proc --level sys -F configurable_sys_proc_units)
+  mem=\$(lshwres -m \"\$framename\" -r mem --level sys -F configurable_sys_mem)
+  echo '\"'\$framename'\",\"'\$cpu'\",\"'\$mem'\"'
+done
+"

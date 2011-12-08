@@ -1,0 +1,17 @@
+#!/bin/bash
+function main()
+{
+  SETTINGS=/opt/inventory/settings.py
+  eval $(grep INV_USER $SETTINGS)
+  cd /opt/inventory/inventaires
+  ./manage.py gethostlist | sed 's/;.*$//' > /tmp/inventory_all
+  chown $INV_USER:$INV_USER /tmp/inventory_all
+  cd scripts
+  mkdir -p /tmp/inv
+  chown -R $INV_USER:$INV_USER /tmp/inv
+  su $INV_USER -c "./UplAndRun /tmp/inv /tmp/inventory_all"
+  cd ..
+  /opt/inventory/manage.py hostimport
+  chown -R $INV_USER:$INV_USER /tmp/inv
+}
+main 

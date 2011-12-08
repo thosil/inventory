@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}DNS Lookup{% endblock %}
+
+{% block content %}
+<h1>DNS Lookup</h1>
+<form action="" method="post"> {%csrf_token%}
+{{form.as_p}}
+<input type="submit" value="Lookup!" />
+</form>
+{% if results %}
+<p>
+{% for line in results%}
+{{line}}<br>
+{% endfor %}
+</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Inventory - {% block title %}{% endblock %}</title>
+<link rel="stylesheet" href="/static/bootstrap.min.css">
+<script src="/static/jquery.min.js"></script>
+<script src="/static/jquery.tablesorter.min.js"></script>
+<script src="/static/bootstrap-alerts.js"></script>
+<script src="/static/bootstrap-dropdown.js"></script>
+<style type="text/css">
+  body { 
+    padding-top: 60px;
+  }
+</style>
+</head>
+
+<body>
+
+<div class="topbar" data-dropdown="dropdown">
+      <div class="fill">
+        <div class="container">
+          <a class="brand" href="/">Inventory</a>
+          {% include "navbar.html" %}
+        </div>
+      </div>
+</div>
+
+<div class="container">
+{% if errormsg %}<div class="alert-message error fade in" data-alert="alert"><a class="close" href="#">×</a><p><strong>Error</strong> "{{errormsg}}" </p></div>{% endif%}
+{% if infomsg %}<div class="alert-message success fade in" data-alert="alert"><a class="close" href="#">×</a><p><strong>Success</strong> "{{infomsg}}" </p></div>{% endif%}
+{% block content %}{% endblock %}
+<footer>
+<p><a href='mailto:admins@exmaple.com'>Admins</a></p>
+</footer>
+</div> <!-- /container -->
+</body>
+</html>

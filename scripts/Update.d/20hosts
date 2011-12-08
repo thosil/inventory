@@ -1,0 +1,4 @@
+#!/bin/bash
+
+# update Hosts (get_inv to all known hosts, process them
+/opt/inventory/scripts/UpdateAll

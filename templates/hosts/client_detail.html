@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Client {{object}}{% endblock %}
+
+{% block content %}
+<a href="../..">[..]</a>
+<div class="hero-unit">
+<h2>{{object}} ({{object.host_set.count}})</h2>
+<a href="/hosts/clients/client/update/{{object.pk}}/">Edit</a>
+</div>
+{% with hosts=object.host_set.all %}
+{% include 'hosts/hosts_table.html' %}
+{% endwith %}
+{% endblock %}

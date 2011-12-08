@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}OSes{% endblock %}
+
+{% block content %}
+{% if object_list %}
+<div class="hero-unit"> 
+<h2>OSes ({{object_list.count}})</h2>
+<p>Here a list of all OS known by Inventory!</p>
+<p>Clic on a field to go to more details.</p>      
+</div>
+<table class="zebra-striped">
+<thead>
+<tr>
+  <th>Type</th>
+  <th>Vendor</th>
+  <th>Full name</th>
+  <th>Hosts</th>
+</tr>
+</thead>
+<tbody>
+{% for os in object_list %}
+  <tr>
+    <td><a href='/hosts/oses/type/{{os.osname}}/'>{{os.osname}}</a></td>
+    <td><a href='/hosts/oses/vendor/{{os.vendor}}/'>{{os.vendor}}</a></td>
+    <td><a href='/hosts/oses/os/{{os.id}}/'>{{os}}</a></td>
+    <td>{{os.host_set.count}}</td>
+  </tr>
+{% endfor %}
+</tbody>
+</table>
+{% else %}
+<h1 style="color:#D92828">No Clients in db</h1>
+{% endif %}
+{% endblock %}

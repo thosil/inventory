@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Vlan {{object.vlannumber}} {{object.vlanname}}{% endblock %}
+
+{% block content %}
+<a href="../..">[..]</a>
+<div class="hero-unit">
+<h2>Vlan {{object.vlannumber}} / {{object.vlanname}}</h2>
+<table class="zebra-striped">
+<tr><th>Network</th><td>{{object.network}}</td></tr>
+<tr><th>Netmask</th><td>{{object.netmask}}</td></tr>
+<tr><th>gateway</th><td>{{object.gateway}}</td></tr>
+<tr><th>dns1</th><td>{{object.dns1}}</td></tr>
+<tr><th>dns2</th><td>{{object.dns2}}</td></tr>
+<tr><th>domain</th><td>{{object.domain}}</td></tr>
+<tr><th>ntp</th><td>{{object.ntp}}</td></tr>
+</table>
+<a href="/hosts/vlans/update/vlan/{{object.pk}}/">Edit</a>
+</div>
+{% with hosts=object.host_set.all %}
+{% include 'hosts/hosts_table.html' %}
+{% endwith%}
+{% endblock %}

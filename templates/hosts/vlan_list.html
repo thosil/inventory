@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Vlans{% endblock %}
+
+{% block content %}
+{% if object_list %}
+<div class="hero-unit">
+<h2>Vlans ({{object_list.count}})</h2>
+<p>Here a list of all vlans known by Inventory!</p>
+<p>Clic on a field to go to more details.</p>      
+</div>                                             
+<script>
+$(document).ready(function()
+{
+  $("#VlanTable").tablesorter();
+});
+</script>
+<table class="zebra-striped" id="VlanTable">
+<thead>
+<tr>
+  <th>Num</th>
+  <th>Name</th>
+  <th>Network</th>
+  <th>NetMask</th>
+  <th>GateWay</th>
+  <th>DNS</th>
+  <th>Hosts</th>
+</tr>
+</thead>
+<tbody>
+{% for vlan in object_list %}
+  <tr>
+    <td><a href='/hosts/vlans/vlan/{{vlan.id}}/'>{{vlan.vlannumber}}</a></td>
+    <td><a href='/hosts/vlans/vlan/{{vlan.id}}/'>{{vlan.vlanname}}</a></td>
+    <td>{{vlan.network}}</td>
+    <td>{{vlan.netmask}}</td>
+    <td>{{vlan.gateway}}</td>
+    <td>{{vlan.dns1}}</td>
+    <td><a href='/hosts/vlans/vlan/{{vlan.id}}/'>{{vlan.host_set.count}}</a></td>
+  </tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% else %}
+<h1 style="color:#D92828">No Vlans in db</h1>
+{% endif %}
+{% endblock %}

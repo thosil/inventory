@@ -1,0 +1,44 @@
+{% if hosts %}
+<script>
+$(document).ready(function()
+{
+  $("#HostTable").tablesorter();
+});
+</script>
+  <table class="zebra-striped" id="HostTable">
+   <thead>
+    <tr>
+      <th>Host ({{hosts.count}})</a></th>
+      <th>OS Name</a></th>
+      <th>OS Version</a></th>
+      <th>Type</a></th>
+      <th>CPU</a></th>
+      <th>MEM</a></th>
+      <th>IP</a></th>
+      <th>Client</a></th>
+      <th>Description</a></th>
+      <th>LastCheck</a></th>
+    </tr>
+   </thead>
+   <tobdy>
+  {% for h in hosts %}
+    <tr>
+      <td><a href=/hosts/hosts/host/{{h.id}}/>{{h}}</a></td>
+      <td><a href=/hosts/oses/type/{{h.os.osname}}/>{{h.os.osname}}</a></td>
+      <td><a href=/hosts/oses/os/{{h.os.id}}/>{{h.os}}</a></td>
+      <td>{{h.type}}</td>
+      <td>{{h.cpu}}</td>
+      <td>{{h.gbmem}}</td>
+      <td>{{h.ip}}</td>
+      <td><a href=/hosts/clients/client/{{h.client.id}}/>{{h.client}}</a></td>
+      <td>{{h.description}}</td>
+      <td>{{h.lastcheck}}</td>
+    </tr>
+  {% endfor %}
+   </tbody>
+  </table>
+{% comment %}
+{% else %}
+<h1 style="color:#D92828">No hosts in db</h1>
+{% endcomment %}
+{% endif %}

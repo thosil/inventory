@@ -1,0 +1,65 @@
+#!/bin/bash
+#set -x
+export LANG=C
+function usage
+{
+  echo "$0 dest host1 host2 ... or $0 dest file"
+  exit 98
+}
+
+function importme
+{
+  excode=0
+  echo "$1" | grep -q "@"
+  if [ $? -eq 0 ]
+  then
+    myuser=$(echo $1| awk -F"@" '{print $1}')@
+    myhost=$(echo $1| awk -F"@" '{print $2}')
+  else
+    myhost=$1
+  fi
+  GOODFILE=$DEST/$myhost-$(date +"%Y%m%d")
+  ERRFILE=$GOODFILE.err
+  scp -q $WDIR/get_inv $myuser$myhost:/tmp > /dev/null 2>&1
+  COPYRC=$(ssh -T -x $myuser$myhost -- "ls /tmp/get_inv" 2>/dev/null |wc -l)
+  COPYOK=${COPYRC:=0}
+  if [ $COPYOK -ne 1 ]
+  then
+    echo "ERROR: Can't send $WDIR/get_inv script to $myhost" > $ERRFILE
+    excode=$((excode+1))
+  else
+    ssh -T -x $myuser$myhost -- "/tmp/get_inv; rm /tmp/get_inv" > $GOODFILE 2> $ERRFILE
+    echo "h.localtime='"$(date +"%Y-%m-%d %H:%M")"'" >> $GOODFILE
+    excode=$((excode+1))
+  fi
+  if [ -s $ERRFILE ]
+  then
+    cat $ERRFILE
+  else
+    rm -f $ERRFILE
+  fi
+  return $excode
+}
+
+[ $# -lt 2 ] && usage
+DEST=$1
+WDIR=$(dirname $0)
+[ ! -d $DEST ] && mkdir -p $DEST
+[ ! -d $DEST ] && echo "ERROR: $DEST is not a directory" && exit 99
+shift
+echo "INFO: Begin uploads ($(date))"
+for h in $@
+do
+  if [ -e $h ]
+  then
+    for newhost in $(cat $h| grep -v '^#')
+    do
+      importme $newhost &
+    done
+  else
+    importme $h &
+  fi
+done
+echo "INFO: please wait..."
+wait
+echo "INFO: End ($(date))"

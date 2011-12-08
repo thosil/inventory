@@ -1,0 +1,40 @@
+<ul class="nav">
+ <li><a href="/hosts/hosts/">Hosts</a></li>
+ <li><a href="/hosts/packages/">Packages</a></li>
+ <li><a href="/hosts/clients/">Clients</a></li>
+ <li><a href="/hosts/vlans/">Vlans</a></li>
+ <li><a href="/hosts/oses/">OS</a></li>
+ <li class="dropdown">
+  <a href="#" class="dropdown-toggle">Reporting</a>
+  <ul class="dropdown-menu">
+   <li><a href="/hosts/packages/no_ilmt/">Hosts without ILMT</a></li>
+   <li><a href="/hosts/reporting/oldinv/">Outdated hosts inventory</a></li>
+  </ul>
+ </li>
+ <li class="dropdown">
+  <a href="#" class="dropdown-toggle">Admin tasks</a>
+  <ul class="dropdown-menu">
+   <li><a href="/lookup/">DNS Lookup</a></li>
+   <li><a href="/hosts/addremovehost/">Add/Remove Host</a></li>
+   <li><a href="/logs/">Logs</a></li>
+   <li><a href={% url admin:index %}>Admin</a></li>
+  </ul>
+ </li>
+</ul>
+<ul class="nav secondary-nav">
+  <form name="searchform" action="" class="pull-left" onsubmit="this.action='/hosts/search/'+this.searchfilter.value+'/'+this.searchfield.value+'/'" method="post">
+   <input class="input-small" type="text" placeholder="" name="searchfield">
+   <select class="medium" name="searchfilter" id="searchfilter">
+     <option value="hostname" >Hostnames</option>
+     <option value="description" >Description</option>
+     <option value="package" >Packages</option>
+     <option value="hosttype" >Types</option>
+     <option value="ostype" >OS Types</option>
+     <option value="osversion" >OS Versions</option>
+     <option value="osvendor" >OS Vendors</option>
+     <option value="ip" >IPs</option>
+     <option value="user" >Users</option>
+   </select>
+   <button class="btn" type="submit">Search</button>
+  </form>
+</ul>

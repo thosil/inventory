@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}OS {{object}}{% endblock %}
+
+{% block content %}
+<a href="../..">[..]</a>
+<div class="hero-unit">
+<h2>{{object}}</h2>
+<table class="zebra-striped">
+<tr><th>Type</th><td><a href='/hosts/oses/type/{{object.osname}}/'>{{object.osname}}</a></td></tr>
+<tr><th>Vendor</th><td><a href='/hosts/oses/vendor/{{object.vendor}}/'>{{object.vendor}}</a></td></tr>
+<tr><th>Major</th><td>{{object.majorversion}}</td></tr>
+<tr><th>Minor</th><td>{{object.minorversion}}</td></tr>
+</table>
+</div>
+{% with hosts=object.host_set.all %}
+{% include 'hosts/hosts_table.html' %}
+{% endwith%}
+{% endblock %}

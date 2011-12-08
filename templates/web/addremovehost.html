@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Add - Remove a host{% endblock %}
+
+{% block content %}
+<h1>Add/Remove Host to inventory</h1>
+<p>Use the form bellow to add a host</p>
+<form action="/hosts/addhost/" method="post"> {%csrf_token%}
+{{addform.as_p}}
+<input type="submit" value="Add Host" />
+</form>
+<p>Use the form bellow to remove a host</p>
+<form action="/hosts/removehost/" method="post"> {%csrf_token%}
+{{removeform.as_p}}
+<input type="submit" value="Remove Host" />
+</form>
+{% endblock %}

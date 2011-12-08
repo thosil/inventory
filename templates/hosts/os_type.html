@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}{{type}}{% endblock %}
+
+{% block content %}
+<a href="../..">[..]</a>
+<div class="hero-unit">
+<h2>{{type}} ({{oses.count}})</h2>
+<p>Here all versions of {{type}} declined by major and minor versions.</p>
+<p>Clic on a field for more details.</p>
+</div>
+<table class="zebra-striped">
+<thead>
+<tr><th>Versions</th><th>Hosts</th></tr>
+</thead>
+<tbody>
+{% for os in oses %}
+  <tr>
+    <td><a href='/hosts/oses/os/{{os.id}}/'>{{os}}</a></td>
+    <td>{{os.host_set.count}}</td>
+  </tr>
+{%endfor%}
+</tbody>
+</table>
+
+<table class="zebra-striped">
+<thead>
+<tr><th>Hosts</th><th>OS</th></tr>
+</thead>
+<tbody>
+</tbody>
+  {%for os in oses%}
+    {%for h in os.host_set.all%}
+    <tr>
+      <td><a href='/hosts/hosts/host/{{h.id}}'>{{h}}</a></td>
+      <td><a href='/hosts/oses/os/{{h.os.id}}/'>{{h.os}}</a></td>
+    </tr>
+    {%endfor%}
+  {%endfor%}
+</tbody>
+</table>
+{% endblock %}

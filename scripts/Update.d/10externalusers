@@ -1,0 +1,4 @@
+#!/bin/bash
+
+# update external user (ldap) list
+/opt/inventory/manage.py externaluserimport

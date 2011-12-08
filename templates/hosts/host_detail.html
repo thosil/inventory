@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Host {{object}}{% endblock %}
+
+{% block content %}
+{% if object %}
+<a href="../..">[..]</a>
+<div class="hero-unit">
+<h2>{{object.hostname}}</h2>
+<h3>{{object.description}}</h3>
+<table class="zebra-striped">
+<tr><th>Client</th><td><a href='/hosts/clients/client/{{object.client.id}}/'>{{object.client}}</a></td></tr>
+<tr><th>OS</th><td><a href='/hosts/oses/os/{{object.os.id}}/'>{{object.os}}</a></td></tr>
+<tr><th>Type</th><td>{{object.type}}</td></tr>
+<tr><th>CPUs</th><td>{{object.cpu}}</td></tr>
+<tr><th>Mem</th><td>{{object.gbmem}}</td></tr>
+<tr><th>Vlan</th><td><a href='/hosts/vlans/vlan/{{object.vlan.id}}/'>{{object.vlan}}</a></td></tr>
+<tr><th>IP</th><td>{{object.ip}}</td></tr>
+<tr><th>Last inventory</th><td>{{object.lastcheck}}</td></tr>
+<tr><th>Last Full Backup</th><td>TBI</td></tr>
+<tr><th>Last Update</th><td>{{object.lastupdate}}</td></tr>
+</table>
+<a href="/hosts/hosts/host/update/{{object.pk}}/">Edit</a>
+</div>
+<p>
+<h3>Disks ({{object.disk_set.count}})</h3>
+<table class="zebra-striped">
+<thead>
+<tr><th>Disk name</th><th>Size</th></tr>
+</thead>
+<tbody>
+{% for d in object.disk_set.all %}
+  <tr><td>{{d.diskname}}</td><td>{{d.size}}GB</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</p>
+<!-- Filesystems -->
+<p>
+<h3>FileSystems ({{object.fs_set.count}})</h3>
+<table class="zebra-striped">
+<thead>
+<tr>
+  <th>Device</th> <th>Type</th> <th>Size</th> <th>%Used</th> <th>Mountpoint</th>
+</tr>
+</thead>
+<tbody>
+{% for fs in object.fs_set.all %}
+<tr>
+    <td>{{fs.device}}</td> <td>{{fs.fstype}}</td> <td>{{fs.get_size_gb}}</td> <td>{{fs.percent_used}}</td> <td>{{fs.mountpoint}}</td>
+</tr>
+{% endfor%}
+</tbody>
+</table>
+</p>
+<!-- /end Filesystems -->
+<p>
+<h3>Users ({{object.user_set.count}})</h3>
+<table class="zebra-striped">
+<thead>
+<tr>
+  <th>uid</th> <th>username</th> <th>gid</th> <th>gecos</th> <th>home</th> <th>shell</th>
+</tr>
+</thead>
+<tbody>
+{% for u in object.user_set.all %}
+  <tr><td>{{u.uid}}</td><td><a href="/hosts/search/user/{{u}}">{{u}}</a></td><td>{{u.gid}}</td><td>{{u.gecos}}</td><td>{{u.home}}</td><td>{{u.shell}}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</p>
+<p>
+<h3>Groups ({{object.group_set.count}})</h3>
+<table class="zebra-striped">
+<thead>
+<tr>
+  <th>gid</th>
+  <th>group name</th>
+  <th>users</th>
+</tr>
+</thead>
+<tbody>
+{% for g in object.group_set.all %}
+  <tr><td>{{g.gid}}</td><td>{{g}}</td><td>
+  {% if g.members.count > 0 %}
+    {% for m in g.members.all %}{{m}} {% endfor  %}
+  {% else %}
+    &nbsp;
+  {%endif%}
+  </td>
+{% endfor %}
+</tbody>
+</table>
+</p>
+<p>
+<h3>Packages ({{object.packages.count}})</h3>
+<table class="zebra-striped">
+<thead>
+<tr>
+  <th>Package Name</th>
+  <th>Version</th>
+</tr>
+</thead>
+<tbody>
+{% for p in object.packages.all %}
+  <tr><td><a href='/hosts/search/package/{{p}}/'>{{p}}</a></td><td>{{p.version}}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</p>
+{% else %}
+TODO: mettre une image de Peugeot 404
+{% endif %}
+{% endblock %}

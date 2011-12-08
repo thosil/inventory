@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Debug{% endblock %}
+
+{% block content %}
+<pre>
+{% debug %}
+<div class="hero-unit">                              
+<h2>Debugging here</h2>                     
+</div>                                               
+<pre>
+--- DEBUG ---
+{% debug %}
+{{debug_data}}
+--- DEBUG ---
+</pre>
+{% endblock %}

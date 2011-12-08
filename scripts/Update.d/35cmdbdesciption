@@ -1,0 +1,4 @@
+#!/bin/bash
+
+# update description from cmdb
+/opt/inventory/manage.py getinfosfromcmdb

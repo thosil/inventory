@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# log 
+
+MAILING=$(python -c 'import settings
+for email in [admins[1] for admins in settings.ADMINS]: print email')
+
+ls /tmp/inv/*.err 1>/dev/null 2>&1
+if [ $? -eq 0 ]
+then
+  for f in /tmp/inv/*.err
+  do
+  cat $f | sed 's/^/'$(basename $f)': /'
+  done | mail -s "[Inventory] err files founded after update" $MAILING
+fi
