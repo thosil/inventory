@@ -3,9 +3,9 @@
 {% block title %}Packages{% endblock %}
 
 {% block content %}
-{% if object_list %}
+{% if current_page_paginator %}
 <div class="hero-unit">
-<h2>Packages ({{object_list.count}})</h2>
+<h2>Packages ({{current_page_paginator.paginator.count}})</h2>
 <p>Here a list of all packages known by Inventory!</p>
 <p>Clic on a field to go to more details.</p>      
 </div>                                             
@@ -19,7 +19,7 @@
 </tr>
 </thead>
 <tbody>
-{% for p in object_list %}
+{% for p in current_page_paginator.object_list %}
   <tr><td><a href='/hosts/packages/package/{{p.id}}/'>{{p}}</a></td><td>{{p.version}}</td><td>{{p.hosts.count}}</td></tr>
 {% endfor %}
 </tbody>
@@ -28,4 +28,6 @@
 {% else %}
 <h1 style="color:#D92828">No Packages in db</h1>
 {% endif %}
+
+{% include "bottom_paginator.html" %}
 {% endblock %}

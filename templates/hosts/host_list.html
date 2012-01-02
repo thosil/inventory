@@ -2,9 +2,10 @@
 {% block title %}{{title}}{% endblock %}
 {% block content %}
 <div class="hero-unit">
-<h2>{{h2}} ({{object_list.count}})</h2>
+<h2>{{h2}} ({{current_page_paginator.paginator.count}})</h2>
 </div>
-{% with hosts=object_list %}
+{% with hosts=current_page_paginator.object_list %}
 {% include 'hosts/hosts_table.html' %}
 {% endwith%}
+{% include 'bottom_paginator.html' %}
 {% endblock %}

@@ -8,10 +8,42 @@ from inventaires.hosts.models import *
 from inventaires.hosts.forms import *
 from django.db.models import Count
 import os
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
-def hosts(request, sortby='hostname'):
-  hosts = Host.objects.order_by(sortby)
-  return render_to_response('hosts/hosts.html',({'hosts': hosts,}))
+class paginator_bottom():
+  def __init__(self, paginator, range_num = 10):
+    #import pdb ; pdb.set_trace()
+    # make some arithmetics to generate the range of pages to show for pagination
+    # show ten pages by default but verify if the range is correct and if we have enough pages
+    current_page_num = int(paginator.number)
+    last_page_num = int(paginator.paginator.num_pages)
+    # range_arithm is range -1 because we add range_arithm to the first
+    # page of the list
+    range_arithm = range_num - 1
+    if last_page_num < range_arithm:
+      incr = last_page_num - 1
+    elif last_page_num == 1:
+      incr = 0
+    else:
+      incr = range_arithm
+    first_of_list = current_page_num - 4
+    if first_of_list < 1:
+      first_of_list = 1
+    last_of_list = first_of_list + incr
+    if last_of_list > last_page_num:
+      last_of_list = last_page_num
+      first_of_list = last_page_num - incr
+    # Now we generate the range of pages to show
+    self.list_range = range(first_of_list, last_of_list + 1)
+    # Now we verify if we need to show the "first" and "last" link
+    if self.list_range[-1] == last_page_num:
+      self.show_last = False
+    else:
+      self.show_last = True
+    if self.list_range[0] == 1:
+      self.show_first = False
+    else:
+      self.show_first = True
 
 def searchview(request, searchclass, searchvalue):
   if searchclass == 'hostname' : return get_host_by(request,'hostname', searchvalue)
@@ -28,37 +60,60 @@ def searchview(request, searchclass, searchvalue):
 def get_host_by(request, searchclass, searchvalue):
   try:
     if searchclass == 'hostname':
-      hosts = Host.objects.filter(hostname__icontains=searchvalue).order_by('hostname',)
-      h2 = "Hosts with %s in hostname." % searchvalue
-    if searchclass == 'description':
+      if searchvalue == 'allhosts':
+        hosts = Host.objects.order_by('hostname')
+        h2 = "All hosts" 
+      else:
+        hosts = Host.objects.filter(hostname__icontains=searchvalue).order_by('hostname',)
+        h2 = "Hosts with %s in hostname." % searchvalue
+    elif searchclass == 'description':
       hosts = Host.objects.filter(description__icontains=searchvalue).order_by('hostname',)
       h2 = "Hosts with %s in descrption." % searchvalue
-    if searchclass == 'type':
+    elif searchclass == 'type':
       hosts = Host.objects.filter(type__icontains=searchvalue)
       h2 = "Hosts with type %s." % searchvalue
-    if searchclass == 'ip':
+    elif searchclass == 'ip':
       hosts = Host.objects.filter(ip__icontains=searchvalue)
       h2 = "Hosts with ip %s." % searchvalue
-    if searchclass == 'user':
+    elif searchclass == 'user':
       hosts = Host.objects.filter(user__username__icontains=searchvalue)
       h2 = "Hosts with user %s." % searchvalue
+
     if hosts.count() == 1:
       return render_to_response('hosts/host_detail.html',({'object': hosts[0]}))
     else:
-      return render_to_response('hosts/host_list.html',({'object_list': hosts,'h2': h2}))
-  except Host.DoesNotExist:
+      paginator = Paginator(hosts, 200)
+      try:
+        current_page = request.GET.get('page')
+        current_page_paginator = paginator.page(current_page)
+      except:
+        current_page_paginator = paginator.page(1)
+
+      pagin_bottom = paginator_bottom(current_page_paginator)
+
+      return render_to_response('hosts/host_list.html',({'current_page_paginator': current_page_paginator, 'pagin_bottom': pagin_bottom ,'h2': h2}))
+  except:
     raise Http404
 
 def get_packages(request, searchvalue):
   try:
-    packages = Package.objects.filter(pkgname__icontains=searchvalue)
-    if packages.count() == 1:
-      return render_to_response('hosts/package_detail.html',({'object': packages[0]}))
+    if searchvalue == 'allpackages':
+      packages_list = Package.objects.all().order_by('pkgname', '-version')
     else:
-      return render_to_response('hosts/package_list.html',({'object_list': packages}))
-  except Package.DoesNotExist:
-    raise Http404
+      packages_list = Package.objects.filter(pkgname__icontains=searchvalue)
 
+    paginator = Paginator(packages_list, 200)
+    try:
+      current_page = request.GET.get('page')
+      current_page_paginator = paginator.page(current_page)
+    except:
+      current_page_paginator = paginator.page(1)
+
+    pagin_bottom = paginator_bottom(current_page_paginator)
+          
+    return render_to_response('hosts/package_list.html',({'current_page_paginator': current_page_paginator, 'pagin_bottom': pagin_bottom}))
+  except:
+    raise Http404
 
 def ostype(request, os_type):
   try:
